@@ -43,6 +43,8 @@
 #include "libcxgb4.h"
 #include "cxgb4-abi.h"
 
+static void c4iw_free_context(struct ibv_context *ibctx);
+
 #define PCI_VENDOR_ID_CHELSIO		0x1425
 
 /*
@@ -80,7 +82,6 @@ static const struct verbs_context_ops  c4iw_ctx_common_ops = {
 	.reg_mr = c4iw_reg_mr,
 	.dereg_mr = c4iw_dereg_mr,
 	.create_cq = c4iw_create_cq,
-	.resize_cq = c4iw_resize_cq,
 	.destroy_cq = c4iw_destroy_cq,
 	.create_srq = c4iw_create_srq,
 	.modify_srq = c4iw_modify_srq,
@@ -90,12 +91,11 @@ static const struct verbs_context_ops  c4iw_ctx_common_ops = {
 	.modify_qp = c4iw_modify_qp,
 	.destroy_qp = c4iw_destroy_qp,
 	.query_qp = c4iw_query_qp,
-	.create_ah = c4iw_create_ah,
-	.destroy_ah = c4iw_destroy_ah,
 	.attach_mcast = c4iw_attach_mcast,
 	.detach_mcast = c4iw_detach_mcast,
 	.post_srq_recv = c4iw_post_srq_recv,
 	.req_notify_cq = c4iw_arm_cq,
+	.free_context = c4iw_free_context,
 };
 
 static const struct verbs_context_ops c4iw_ctx_t4_ops = {
@@ -143,14 +143,11 @@ static struct verbs_context *c4iw_alloc_context(struct ibv_device *ibdev,
 	} 
 
 	verbs_set_ops(&context->ibv_ctx, &c4iw_ctx_common_ops);
+	if (ibv_cmd_query_device(&context->ibv_ctx.context, &attr,
+				 &raw_fw_ver, &qcmd, sizeof(qcmd)))
+		goto err_unmap;
 
 	if (!rhp->mmid2ptr) {
-		int ret;
-
-		ret = ibv_cmd_query_device(&context->ibv_ctx.context, &attr,
-					   &raw_fw_ver, &qcmd, sizeof(qcmd));
-		if (ret)
-			goto err_unmap;
 		rhp->max_mr = attr.max_mr;
 		rhp->mmid2ptr = calloc(attr.max_mr, sizeof(void *));
 		if (!rhp->mmid2ptr) {
@@ -203,9 +200,9 @@ err_free:
 	if (rhp->cqid2ptr)
 		free(rhp->cqid2ptr);
 	if (rhp->qpid2ptr)
-		free(rhp->cqid2ptr);
+		free(rhp->qpid2ptr);
 	if (rhp->mmid2ptr)
-		free(rhp->cqid2ptr);
+		free(rhp->mmid2ptr);
 	verbs_uninit_context(&context->ibv_ctx);
 	free(context);
 	return NULL;
@@ -459,7 +456,6 @@ static const struct verbs_device_ops c4iw_dev_ops = {
 	.alloc_device = c4iw_device_alloc,
 	.uninit_device = c4iw_uninit_device,
 	.alloc_context = c4iw_alloc_context,
-	.free_context = c4iw_free_context,
 };
 PROVIDER_DRIVER(cxgb4, c4iw_dev_ops);
 

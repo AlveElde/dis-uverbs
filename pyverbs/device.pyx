@@ -12,25 +12,21 @@ from .pyverbs_error import PyverbsRDMAError, PyverbsError
 from pyverbs.cq cimport CQEX, CQ, CompChannel
 from .pyverbs_error import PyverbsUserError
 from pyverbs.base import PyverbsRDMAErrno
+from pyverbs.base cimport close_weakrefs
 cimport pyverbs.libibverbs_enums as e
 cimport pyverbs.libibverbs as v
+from pyverbs.cmid cimport CMID
+from pyverbs.xrcd cimport XRCD
 from pyverbs.addr cimport GID
 from pyverbs.mr import DMMR
 from pyverbs.pd cimport PD
 from pyverbs.qp cimport QP
+from libc.stdlib cimport free, malloc
+from libc.string cimport memset
+from libc.stdint cimport uint64_t
 
-cdef extern from 'errno.h':
-    int errno
 cdef extern from 'endian.h':
     unsigned long be64toh(unsigned long host_64bits);
-cdef extern from 'stdlib.h':
-    void free(void *ptr)
-cdef extern from 'string.h':
-    void *memset(void *s, int c, size_t n)
-cdef extern from 'stdlib.h':
-    void *malloc(size_t size)
-cdef extern from 'stdint.h':
-    ctypedef int uint64_t
 
 
 class Device(PyverbsObject):
@@ -73,37 +69,60 @@ cdef class Context(PyverbsCM):
     """
     Context class represents the C ibv_context.
     """
-    def __cinit__(self, **kwargs):
+    def __init__(self, **kwargs):
         """
         Initializes a Context object. The function searches the IB devices list
         for a device with the name provided by the user. If such a device is
-        found, it is opened.
-        :param kwargs: Currently supports 'name' argument only, the IB device's
-                       name.
+        found, it is opened (unless provider attributes were given).
+        In case of cmid argument, CMID object already holds an ibv_context
+        initiated pointer, hence all we have to do is assign this pointer to
+        Context's object pointer.
+        :param kwargs: Arguments:
+            * *name*
+              The device's name
+            * *attr*
+              Provider-specific attributes. If not None, it means that the
+              device will be opened by the provider and __init__ will return
+              after locating the requested device.
+            * *cmid*
+              A CMID object. If not None, it means that the device was already
+              opened by a CMID class, and only a pointer assignment is missing.
         :return: None
         """
         cdef int count
         cdef v.ibv_device **dev_list
+        cdef CMID cmid
 
+        super().__init__()
         self.pds = weakref.WeakSet()
         self.dms = weakref.WeakSet()
         self.ccs = weakref.WeakSet()
         self.cqs = weakref.WeakSet()
         self.qps = weakref.WeakSet()
+        self.xrcds = weakref.WeakSet()
+        self.vars = weakref.WeakSet()
 
-        dev_name = kwargs.get('name')
+        self.name = kwargs.get('name')
+        provider_attr = kwargs.get('attr')
+        cmid = kwargs.get('cmid')
+        if cmid is not None:
+            self.context = cmid.id.verbs
+            cmid.ctx = self
+            return
 
-        if dev_name is not None:
-            self.name = dev_name
-        else:
+        if self.name is None:
             raise PyverbsUserError('Device name must be provided')
-
         dev_list = v.ibv_get_device_list(&count)
         if dev_list == NULL:
             raise PyverbsRDMAError('Failed to get devices list')
         try:
             for i in range(count):
                 if dev_list[i].name.decode() == self.name:
+                    if provider_attr is not None:
+                        # A provider opens its own context, we're just
+                        # setting its IB device
+                        self.device = dev_list[i]
+                        return
                     self.context = v.ibv_open_device(dev_list[i])
                     if self.context == NULL:
                         raise PyverbsRDMAErrno('Failed to open device {dev}'.
@@ -125,13 +144,14 @@ cdef class Context(PyverbsCM):
         self.close()
 
     cpdef close(self):
-        self.logger.debug('Closing Context')
-        self.close_weakrefs([self.qps, self.ccs, self.cqs, self.dms, self.pds])
         if self.context != NULL:
+            self.logger.debug('Closing Context')
+            close_weakrefs([self.qps, self.ccs, self.cqs, self.dms, self.pds,
+                            self.xrcds, self.vars])
             rc = v.ibv_close_device(self.context)
             if rc != 0:
                 raise PyverbsRDMAErrno('Failed to close device {dev}'.
-                                       format(dev=self.device.name), errno)
+                                       format(dev=self.device.name))
             self.context = NULL
 
     @property
@@ -147,8 +167,8 @@ cdef class Context(PyverbsCM):
         dev_attr = DeviceAttr()
         rc = v.ibv_query_device(self.context, &dev_attr.dev_attr)
         if rc != 0:
-            raise PyverbsRDMAErrno('Failed to query device {name}'.
-                                   format(name=self.name), errno)
+            raise PyverbsRDMAError('Failed to query device {name}'.
+                                   format(name=self.name), rc)
         return dev_attr
 
     def query_device_ex(self, QueryDeviceExInput ex_input = None):
@@ -163,8 +183,8 @@ cdef class Context(PyverbsCM):
                                    &ex_input.input if ex_input is not None else NULL,
                                    &dev_attr_ex.dev_attr)
         if rc != 0:
-            raise PyverbsRDMAErrno('Failed to query EX device {name}'.
-                                   format(name=self.name))
+            raise PyverbsRDMAError('Failed to query EX device {name}'.
+                                   format(name=self.name), rc)
         return dev_attr_ex
 
     def query_gid(self, unsigned int port_num, int index):
@@ -175,6 +195,14 @@ cdef class Context(PyverbsCM):
                                                                    format(idx=index, port=port_num))
         return gid
 
+    def query_gid_type(self, unsigned int port_num, unsigned int index):
+        cdef v.ibv_gid_type gid_type
+        rc = v.ibv_query_gid_type(self.context, port_num, index, &gid_type)
+        if rc != 0:
+            raise PyverbsRDMAErrno('Failed to query gid type of port {p} and gid index {g}'
+                                   .format(p=port_num, g=index))
+        return gid_type
+
     def query_port(self, unsigned int port_num):
         """
         Query port <port_num> of the device and returns its attributes.
@@ -184,7 +212,8 @@ cdef class Context(PyverbsCM):
         port_attrs = PortAttr()
         rc = v.ibv_query_port(self.context, port_num, &port_attrs.attr)
         if rc != 0:
-            raise PyverbsRDMAErrno('Failed to query port {p}'.format(p=port_num))
+            raise PyverbsRDMAError('Failed to query port {p}'.
+                                   format(p=port_num), rc)
         return port_attrs
 
     cdef add_ref(self, obj):
@@ -198,8 +227,16 @@ cdef class Context(PyverbsCM):
             self.cqs.add(obj)
         elif isinstance(obj, QP):
             self.qps.add(obj)
+        elif isinstance(obj, XRCD):
+            self.xrcds.add(obj)
+        elif isinstance(obj, VAR):
+            self.vars.add(obj)
         else:
             raise PyverbsError('Unrecognized object type')
+
+    @property
+    def cmd_fd(self):
+        return self.context.cmd_fd
 
 
 cdef class DeviceAttr(PyverbsObject):
@@ -371,7 +408,8 @@ cdef class DeviceAttr(PyverbsObject):
 
 
 cdef class QueryDeviceExInput(PyverbsObject):
-    def __cinit__(self, comp_mask):
+    def __init__(self, comp_mask):
+        super().__init__()
         self.ex_input.comp_mask = comp_mask
 
 
@@ -388,6 +426,42 @@ cdef class ODPCaps(PyverbsObject):
     @property
     def ud_odp_caps(self):
         return self.odp_caps.per_transport_caps.ud_odp_caps
+    @property
+    def xrc_odp_caps(self):
+        return self.xrc_odp_caps
+    @xrc_odp_caps.setter
+    def xrc_odp_caps(self, val):
+       self.xrc_odp_caps = val
+
+    def __str__(self):
+        general_caps = {e.IBV_ODP_SUPPORT: 'IBV_ODP_SUPPORT',
+              e.IBV_ODP_SUPPORT_IMPLICIT: 'IBV_ODP_SUPPORT_IMPLICIT'}
+
+        l = {e.IBV_ODP_SUPPORT_SEND: 'IBV_ODP_SUPPORT_SEND',
+             e.IBV_ODP_SUPPORT_RECV: 'IBV_ODP_SUPPORT_RECV',
+             e.IBV_ODP_SUPPORT_WRITE: 'IBV_ODP_SUPPORT_WRITE',
+             e.IBV_ODP_SUPPORT_READ: 'IBV_ODP_SUPPORT_READ',
+             e.IBV_ODP_SUPPORT_ATOMIC: 'IBV_ODP_SUPPORT_ATOMIC',
+             e.IBV_ODP_SUPPORT_SRQ_RECV: 'IBV_ODP_SUPPORT_SRQ_RECV'}
+
+        print_format = '{}: {}\n'
+        return print_format.format('ODP General caps', str_from_flags(self.general_caps, general_caps)) +\
+            print_format.format('RC ODP caps', str_from_flags(self.rc_odp_caps, l)) +\
+            print_format.format('UD ODP caps', str_from_flags(self.ud_odp_caps, l)) +\
+            print_format.format('UC ODP caps', str_from_flags(self.uc_odp_caps, l)) +\
+            print_format.format('XRC ODP caps', str_from_flags(self.xrc_odp_caps, l))
+
+
+cdef class PCIAtomicCaps(PyverbsObject):
+    @property
+    def fetch_add(self):
+        return self.caps.fetch_add
+    @property
+    def swap(self):
+        return self.caps.swap
+    @property
+    def compare_swap(self):
+        return self.caps.compare_swap
 
 
 cdef class TSOCaps(PyverbsObject):
@@ -472,6 +546,7 @@ cdef class DeviceAttrEx(PyverbsObject):
     def odp_caps(self):
         caps = ODPCaps()
         caps.odp_caps = self.dev_attr.odp_caps
+        caps.xrc_odp_caps = self.dev_attr.xrc_odp_caps
         return caps
     @property
     def completion_timestamp_mask(self):
@@ -486,6 +561,11 @@ cdef class DeviceAttrEx(PyverbsObject):
     def tso_caps(self):
         caps = TSOCaps()
         caps.tso_caps = self.dev_attr.tso_caps
+        return caps
+    @property
+    def pci_atomic_caps(self):
+        caps = PCIAtomicCaps()
+        caps.caps = self.dev_attr.pci_atomic_caps
         return caps
     @property
     def rss_caps(self):
@@ -519,7 +599,7 @@ cdef class DeviceAttrEx(PyverbsObject):
 
 
 cdef class AllocDmAttr(PyverbsObject):
-    def __cinit__(self, length, log_align_req = 0, comp_mask = 0):
+    def __init__(self, length, log_align_req = 0, comp_mask = 0):
         """
         Creates an AllocDmAttr object with the given parameters. This object
         can than be used to create a DM object.
@@ -528,6 +608,7 @@ cdef class AllocDmAttr(PyverbsObject):
         :param comp_mask: compatibility mask
         :return: An AllocDmAttr object
         """
+        super().__init__()
         self.alloc_dm_attr.length = length
         self.alloc_dm_attr.log_align_req = log_align_req
         self.alloc_dm_attr.comp_mask = comp_mask
@@ -558,13 +639,14 @@ cdef class AllocDmAttr(PyverbsObject):
 
 
 cdef class DM(PyverbsCM):
-    def __cinit__(self, Context context, AllocDmAttr dm_attr not None):
+    def __init__(self, Context context, AllocDmAttr dm_attr not None):
         """
         Allocate a device (direct) memory.
         :param context: The context of the device on which to allocate memory
         :param dm_attr: Attributes that define the DM
         :return: A DM object on success
         """
+        super().__init__()
         self.dm_mrs = weakref.WeakSet()
         device_attr = context.query_device_ex()
         if device_attr.max_dm_size <= 0:
@@ -583,12 +665,12 @@ cdef class DM(PyverbsCM):
         self.close()
 
     cpdef close(self):
-        self.logger.debug('Closing DM')
-        self.close_weakrefs([self.dm_mrs])
         if self.dm != NULL:
+            self.logger.debug('Closing DM')
+            close_weakrefs([self.dm_mrs])
             rc = v.ibv_free_dm(self.dm)
             if rc != 0:
-                raise PyverbsRDMAErrno('Failed to free dm')
+                raise PyverbsRDMAError('Failed to free dm', rc)
             self.dm = NULL
         self.context = None
 
@@ -600,7 +682,7 @@ cdef class DM(PyverbsCM):
         rc = v.ibv_memcpy_to_dm(<v.ibv_dm *>self.dm, <uint64_t>dm_offset,
                                 <char *>data, <size_t>length)
         if rc != 0:
-            raise PyverbsRDMAErrno('Failed to copy to dm')
+            raise PyverbsRDMAError('Failed to copy to dm', rc)
 
     def copy_from_dm(self, dm_offset, length):
         cdef char *data =<char*>malloc(length)
@@ -608,7 +690,7 @@ cdef class DM(PyverbsCM):
         rc = v.ibv_memcpy_from_dm(<void *>data, <v.ibv_dm *>self.dm,
                                   <uint64_t>dm_offset, <size_t>length)
         if rc != 0:
-            raise PyverbsRDMAErrno('Failed to copy from dm')
+            raise PyverbsRDMAError('Failed to copy from dm', rc)
         res = data[:length]
         free(data)
         return res
@@ -745,7 +827,7 @@ def guid_to_hex(node_guid):
 def port_state_to_str(port_state):
     l = {0: 'NOP', 1: 'Down', 2: 'Init', 3: 'Armed', 4: 'Active', 5: 'Defer'}
     try:
-        return '{s} ({n})'.format(s=l[port_state].name, n=port_state)
+        return '{s} ({n})'.format(s=l[port_state], n=port_state)
     except KeyError:
         return 'Invalid state ({s})'.format(s=port_state)
 
@@ -860,8 +942,8 @@ def width_to_str(width):
 
 
 def speed_to_str(speed):
-    l = {1: '2.5 Gbps', 2: '5.0 Gbps', 4: '5.0 Gbps', 8: '10.0 Gbps',
-         16: '14.0 Gbps', 32: '25.0 Gbps', 64: '50.0 Gbps'}
+    l = {0: '0.0 Gbps', 1: '2.5 Gbps', 2: '5.0 Gbps', 4: '5.0 Gbps',
+         8: '10.0 Gbps', 16: '14.0 Gbps', 32: '25.0 Gbps', 64: '50.0 Gbps'}
     try:
         return '{s} ({n})'.format(s=l[speed], n=speed)
     except KeyError:
@@ -893,3 +975,19 @@ def get_device_list():
     finally:
         v.ibv_free_device_list(dev_list)
     return devices
+
+
+cdef class VAR(PyverbsObject):
+    """
+    This is an abstract class of Virtio Access Region (VAR).
+    Each device specific VAR implementation should inherit this class
+    and initialize it according to the device attributes.
+    """
+    def __init__(self, Context context not None, **kwargs):
+        self.context = context
+
+    def __dealloc__(self):
+        self.close()
+
+    cpdef close(self):
+        pass

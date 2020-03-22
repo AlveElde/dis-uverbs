@@ -44,7 +44,7 @@
 #      prefers python3 if available.
 #   -DNO_PYVERBS=1 (default, build pyverbs)
 #      Invoke cython to build pyverbs. Usually you will run with this option
-#      is set, but it will be disabled for travis runs.
+#      set
 #   -DENABLE_IBDIAGS_COMPAT=True (default False)
 #      Include obsolete scripts. These scripts are replaced by C programs with
 #      a different interface now.
@@ -68,7 +68,7 @@ endif()
 set(PACKAGE_NAME "RDMA")
 
 # See Documentation/versioning.md
-set(PACKAGE_VERSION "26.0")
+set(PACKAGE_VERSION "29.0")
 # When this is changed the values in these files need changing too:
 #   debian/control
 #   debian/libibverbs1.symbols

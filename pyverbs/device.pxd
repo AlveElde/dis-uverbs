@@ -9,6 +9,7 @@ cimport pyverbs.libibverbs as v
 
 cdef class Context(PyverbsCM):
     cdef v.ibv_context *context
+    cdef v.ibv_device *device
     cdef object name
     cdef add_ref(self, obj)
     cdef object pds
@@ -16,6 +17,8 @@ cdef class Context(PyverbsCM):
     cdef object ccs
     cdef object cqs
     cdef object qps
+    cdef object xrcds
+    cdef object vars
 
 cdef class DeviceAttr(PyverbsObject):
     cdef v.ibv_device_attr dev_attr
@@ -25,12 +28,16 @@ cdef class QueryDeviceExInput(PyverbsObject):
 
 cdef class ODPCaps(PyverbsObject):
     cdef v.ibv_odp_caps odp_caps
+    cdef object xrc_odp_caps
 
 cdef class RSSCaps(PyverbsObject):
     cdef v.ibv_rss_caps rss_caps
 
 cdef class PacketPacingCaps(PyverbsObject):
     cdef v.ibv_packet_pacing_caps packet_pacing_caps
+
+cdef class PCIAtomicCaps(PyverbsObject):
+    cdef v.ibv_pci_atomic_caps caps
 
 cdef class TMCaps(PyverbsObject):
     cdef v.ibv_tm_caps tm_caps
@@ -55,3 +62,7 @@ cdef class DM(PyverbsCM):
 
 cdef class PortAttr(PyverbsObject):
     cdef v.ibv_port_attr attr
+
+cdef class VAR(PyverbsObject):
+    cdef object context
+    cpdef close(self)

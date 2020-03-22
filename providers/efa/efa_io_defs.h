@@ -6,10 +6,17 @@
 #ifndef _EFA_IO_H_
 #define _EFA_IO_H_
 
+#define EFA_GET(ptr, type) \
+	((*(ptr) & type##_MASK) >> type##_SHIFT)
+
+#define EFA_SET(ptr, type, value) \
+	({ *(ptr) |= ((value) << type##_SHIFT) & type##_MASK; })
+
 #define BIT(nr) (1UL << (nr))
 #define GENMASK(h, l) (((1U << ((h) - (l) + 1)) - 1) << (l))
 
 #define EFA_IO_TX_DESC_NUM_BUFS              2
+#define EFA_IO_TX_DESC_NUM_RDMA_BUFS         1
 #define EFA_IO_TX_DESC_INLINE_MAX_SIZE       32
 #define EFA_IO_TX_DESC_IMM_DATA_SIZE         4
 
@@ -23,6 +30,8 @@ enum efa_io_queue_type {
 enum efa_io_send_op_type {
 	/* send message */
 	EFA_IO_SEND                                 = 0,
+	/* RDMA read */
+	EFA_IO_RDMA_READ                            = 1,
 };
 
 enum efa_io_comp_status {
@@ -105,35 +114,25 @@ struct efa_io_tx_meta_desc {
 	uint16_t ah;
 
 	uint16_t reserved;
+
+	/* Queue key */
+	uint32_t qkey;
+
+	uint8_t reserved2[12];
 };
 
 /*
- * Tx buffer descriptor, for any transport type. Preceded by metadata
+ * Tx queue buffer descriptor, for any transport type. Preceded by metadata
  * descriptor.
  */
 struct efa_io_tx_buf_desc {
 	/* length in bytes */
-	uint16_t length;
+	uint32_t length;
 
 	/*
-	 * control flags
-	 * 6:0 : reserved16
-	 * 7 : meta_desc - MBZ
+	 * 23:0 : lkey - local memory translation key
+	 * 31:24 : reserved - MBZ
 	 */
-	uint8_t ctrl1;
-
-	/*
-	 * control flags
-	 * 0 : phase - phase bit
-	 * 1 : reserved25 - MBZ
-	 * 2 : first - Indicates first descriptor in
-	 *    transaction. MBZ
-	 * 3 : last - Indicates last descriptor in transaction
-	 * 7:4 : reserved28 - MBZ
-	 */
-	uint8_t ctrl;
-
-	/* memory translation key */
 	uint32_t lkey;
 
 	/* Buffer address bits[31:0] */
@@ -143,36 +142,9 @@ struct efa_io_tx_buf_desc {
 	uint32_t buf_addr_hi;
 };
 
-/* Tx meta descriptor for UD */
-struct efa_io_tx_ud_meta {
-	/* Queue key */
-	uint32_t qkey;
-
-	uint8_t reserved[12];
-};
-
 struct efa_io_remote_mem_addr {
 	/* length in bytes */
-	uint16_t length;
-
-	/*
-	 * control flags
-	 * 5:0 : reserved16
-	 * 6 : meta_extension - Must be set
-	 * 7 : meta_desc - Must be set
-	 */
-	uint8_t ctrl1;
-
-	/*
-	 * control flags
-	 * 0 : phase - phase bit
-	 * 1 : reserved25 - MBZ
-	 * 2 : first - Indicates first descriptor in
-	 *    transaction. MBZ
-	 * 3 : last - Indicates last descriptor in transaction
-	 * 7:4 : reserved28 - MBZ
-	 */
-	uint8_t ctrl;
+	uint32_t length;
 
 	/* remote memory translation key */
 	uint32_t rkey;
@@ -184,30 +156,30 @@ struct efa_io_remote_mem_addr {
 	uint32_t buf_addr_hi;
 };
 
+struct efa_io_rdma_req {
+	/* Remote memory address */
+	struct efa_io_remote_mem_addr remote_mem;
+
+	/* Local memory address */
+	struct efa_io_tx_buf_desc local_mem[1];
+};
+
 /*
  * Tx WQE, composed of tx meta descriptors followed by either tx buffer
  * descriptors or inline data
  */
 struct efa_io_tx_wqe {
 	/* TX meta */
-	struct efa_io_tx_meta_desc common;
+	struct efa_io_tx_meta_desc meta;
 
 	union {
-		/* Tx meta for UD */
-		struct efa_io_tx_ud_meta ud;
-
-		/* Reserved Tx meta for SRD */
-		uint8_t srd_padding[16];
-
-		/* RDMA memory address */
-		struct efa_io_remote_mem_addr rdma_mem_addr;
-	} u;
-
-	union {
-		/* buffer descriptors */
+		/* Send buffer descriptors */
 		struct efa_io_tx_buf_desc sgl[2];
 
 		uint8_t inline_data[32];
+
+		/* RDMA local and remote memory addresses */
+		struct efa_io_rdma_req rdma_req;
 	} data;
 };
 
@@ -318,6 +290,7 @@ struct efa_io_rx_cdesc_wide {
 };
 
 /* tx_meta_desc */
+#define EFA_IO_TX_META_DESC_OP_TYPE_SHIFT                   0
 #define EFA_IO_TX_META_DESC_OP_TYPE_MASK                    GENMASK(3, 0)
 #define EFA_IO_TX_META_DESC_HAS_IMM_SHIFT                   4
 #define EFA_IO_TX_META_DESC_HAS_IMM_MASK                    BIT(4)
@@ -327,6 +300,7 @@ struct efa_io_rx_cdesc_wide {
 #define EFA_IO_TX_META_DESC_META_EXTENSION_MASK             BIT(6)
 #define EFA_IO_TX_META_DESC_META_DESC_SHIFT                 7
 #define EFA_IO_TX_META_DESC_META_DESC_MASK                  BIT(7)
+#define EFA_IO_TX_META_DESC_PHASE_SHIFT                     0
 #define EFA_IO_TX_META_DESC_PHASE_MASK                      BIT(0)
 #define EFA_IO_TX_META_DESC_FIRST_SHIFT                     2
 #define EFA_IO_TX_META_DESC_FIRST_MASK                      BIT(2)
@@ -336,26 +310,11 @@ struct efa_io_rx_cdesc_wide {
 #define EFA_IO_TX_META_DESC_COMP_REQ_MASK                   BIT(4)
 
 /* tx_buf_desc */
-#define EFA_IO_TX_BUF_DESC_META_DESC_SHIFT                  7
-#define EFA_IO_TX_BUF_DESC_META_DESC_MASK                   BIT(7)
-#define EFA_IO_TX_BUF_DESC_PHASE_MASK                       BIT(0)
-#define EFA_IO_TX_BUF_DESC_FIRST_SHIFT                      2
-#define EFA_IO_TX_BUF_DESC_FIRST_MASK                       BIT(2)
-#define EFA_IO_TX_BUF_DESC_LAST_SHIFT                       3
-#define EFA_IO_TX_BUF_DESC_LAST_MASK                        BIT(3)
-
-/* remote_mem_addr */
-#define EFA_IO_REMOTE_MEM_ADDR_META_EXTENSION_SHIFT         6
-#define EFA_IO_REMOTE_MEM_ADDR_META_EXTENSION_MASK          BIT(6)
-#define EFA_IO_REMOTE_MEM_ADDR_META_DESC_SHIFT              7
-#define EFA_IO_REMOTE_MEM_ADDR_META_DESC_MASK               BIT(7)
-#define EFA_IO_REMOTE_MEM_ADDR_PHASE_MASK                   BIT(0)
-#define EFA_IO_REMOTE_MEM_ADDR_FIRST_SHIFT                  2
-#define EFA_IO_REMOTE_MEM_ADDR_FIRST_MASK                   BIT(2)
-#define EFA_IO_REMOTE_MEM_ADDR_LAST_SHIFT                   3
-#define EFA_IO_REMOTE_MEM_ADDR_LAST_MASK                    BIT(3)
+#define EFA_IO_TX_BUF_DESC_LKEY_SHIFT                       0
+#define EFA_IO_TX_BUF_DESC_LKEY_MASK                        GENMASK(23, 0)
 
 /* rx_desc */
+#define EFA_IO_RX_DESC_LKEY_SHIFT                           0
 #define EFA_IO_RX_DESC_LKEY_MASK                            GENMASK(23, 0)
 #define EFA_IO_RX_DESC_FIRST_SHIFT                          30
 #define EFA_IO_RX_DESC_FIRST_MASK                           BIT(30)
@@ -363,6 +322,7 @@ struct efa_io_rx_cdesc_wide {
 #define EFA_IO_RX_DESC_LAST_MASK                            BIT(31)
 
 /* cdesc_common */
+#define EFA_IO_CDESC_COMMON_PHASE_SHIFT                     0
 #define EFA_IO_CDESC_COMMON_PHASE_MASK                      BIT(0)
 #define EFA_IO_CDESC_COMMON_Q_TYPE_SHIFT                    1
 #define EFA_IO_CDESC_COMMON_Q_TYPE_MASK                     GENMASK(2, 1)
@@ -370,255 +330,5 @@ struct efa_io_rx_cdesc_wide {
 #define EFA_IO_CDESC_COMMON_HAS_IMM_MASK                    BIT(3)
 #define EFA_IO_CDESC_COMMON_WIDE_COMPLETION_SHIFT           4
 #define EFA_IO_CDESC_COMMON_WIDE_COMPLETION_MASK            BIT(4)
-
-static inline uint8_t get_efa_io_tx_meta_desc_op_type(const struct efa_io_tx_meta_desc *p)
-{
-	return p->ctrl1 & EFA_IO_TX_META_DESC_OP_TYPE_MASK;
-}
-
-static inline void set_efa_io_tx_meta_desc_op_type(struct efa_io_tx_meta_desc *p, uint8_t val)
-{
-	p->ctrl1 |= val & EFA_IO_TX_META_DESC_OP_TYPE_MASK;
-}
-
-static inline uint8_t get_efa_io_tx_meta_desc_has_imm(const struct efa_io_tx_meta_desc *p)
-{
-	return (p->ctrl1 & EFA_IO_TX_META_DESC_HAS_IMM_MASK) >> EFA_IO_TX_META_DESC_HAS_IMM_SHIFT;
-}
-
-static inline void set_efa_io_tx_meta_desc_has_imm(struct efa_io_tx_meta_desc *p, uint8_t val)
-{
-	p->ctrl1 |= (val << EFA_IO_TX_META_DESC_HAS_IMM_SHIFT) & EFA_IO_TX_META_DESC_HAS_IMM_MASK;
-}
-
-static inline uint8_t get_efa_io_tx_meta_desc_inline_msg(const struct efa_io_tx_meta_desc *p)
-{
-	return (p->ctrl1 & EFA_IO_TX_META_DESC_INLINE_MSG_MASK) >> EFA_IO_TX_META_DESC_INLINE_MSG_SHIFT;
-}
-
-static inline void set_efa_io_tx_meta_desc_inline_msg(struct efa_io_tx_meta_desc *p, uint8_t val)
-{
-	p->ctrl1 |= (val << EFA_IO_TX_META_DESC_INLINE_MSG_SHIFT) & EFA_IO_TX_META_DESC_INLINE_MSG_MASK;
-}
-
-static inline uint8_t get_efa_io_tx_meta_desc_meta_extension(const struct efa_io_tx_meta_desc *p)
-{
-	return (p->ctrl1 & EFA_IO_TX_META_DESC_META_EXTENSION_MASK) >> EFA_IO_TX_META_DESC_META_EXTENSION_SHIFT;
-}
-
-static inline void set_efa_io_tx_meta_desc_meta_extension(struct efa_io_tx_meta_desc *p, uint8_t val)
-{
-	p->ctrl1 |= (val << EFA_IO_TX_META_DESC_META_EXTENSION_SHIFT) & EFA_IO_TX_META_DESC_META_EXTENSION_MASK;
-}
-
-static inline uint8_t get_efa_io_tx_meta_desc_meta_desc(const struct efa_io_tx_meta_desc *p)
-{
-	return (p->ctrl1 & EFA_IO_TX_META_DESC_META_DESC_MASK) >> EFA_IO_TX_META_DESC_META_DESC_SHIFT;
-}
-
-static inline void set_efa_io_tx_meta_desc_meta_desc(struct efa_io_tx_meta_desc *p, uint8_t val)
-{
-	p->ctrl1 |= (val << EFA_IO_TX_META_DESC_META_DESC_SHIFT) & EFA_IO_TX_META_DESC_META_DESC_MASK;
-}
-
-static inline uint8_t get_efa_io_tx_meta_desc_phase(const struct efa_io_tx_meta_desc *p)
-{
-	return p->ctrl2 & EFA_IO_TX_META_DESC_PHASE_MASK;
-}
-
-static inline void set_efa_io_tx_meta_desc_phase(struct efa_io_tx_meta_desc *p, uint8_t val)
-{
-	p->ctrl2 |= val & EFA_IO_TX_META_DESC_PHASE_MASK;
-}
-
-static inline uint8_t get_efa_io_tx_meta_desc_first(const struct efa_io_tx_meta_desc *p)
-{
-	return (p->ctrl2 & EFA_IO_TX_META_DESC_FIRST_MASK) >> EFA_IO_TX_META_DESC_FIRST_SHIFT;
-}
-
-static inline void set_efa_io_tx_meta_desc_first(struct efa_io_tx_meta_desc *p, uint8_t val)
-{
-	p->ctrl2 |= (val << EFA_IO_TX_META_DESC_FIRST_SHIFT) & EFA_IO_TX_META_DESC_FIRST_MASK;
-}
-
-static inline uint8_t get_efa_io_tx_meta_desc_last(const struct efa_io_tx_meta_desc *p)
-{
-	return (p->ctrl2 & EFA_IO_TX_META_DESC_LAST_MASK) >> EFA_IO_TX_META_DESC_LAST_SHIFT;
-}
-
-static inline void set_efa_io_tx_meta_desc_last(struct efa_io_tx_meta_desc *p, uint8_t val)
-{
-	p->ctrl2 |= (val << EFA_IO_TX_META_DESC_LAST_SHIFT) & EFA_IO_TX_META_DESC_LAST_MASK;
-}
-
-static inline uint8_t get_efa_io_tx_meta_desc_comp_req(const struct efa_io_tx_meta_desc *p)
-{
-	return (p->ctrl2 & EFA_IO_TX_META_DESC_COMP_REQ_MASK) >> EFA_IO_TX_META_DESC_COMP_REQ_SHIFT;
-}
-
-static inline void set_efa_io_tx_meta_desc_comp_req(struct efa_io_tx_meta_desc *p, uint8_t val)
-{
-	p->ctrl2 |= (val << EFA_IO_TX_META_DESC_COMP_REQ_SHIFT) & EFA_IO_TX_META_DESC_COMP_REQ_MASK;
-}
-
-static inline uint8_t get_efa_io_tx_buf_desc_meta_desc(const struct efa_io_tx_buf_desc *p)
-{
-	return (p->ctrl1 & EFA_IO_TX_BUF_DESC_META_DESC_MASK) >> EFA_IO_TX_BUF_DESC_META_DESC_SHIFT;
-}
-
-static inline void set_efa_io_tx_buf_desc_meta_desc(struct efa_io_tx_buf_desc *p, uint8_t val)
-{
-	p->ctrl1 |= (val << EFA_IO_TX_BUF_DESC_META_DESC_SHIFT) & EFA_IO_TX_BUF_DESC_META_DESC_MASK;
-}
-
-static inline uint8_t get_efa_io_tx_buf_desc_phase(const struct efa_io_tx_buf_desc *p)
-{
-	return p->ctrl & EFA_IO_TX_BUF_DESC_PHASE_MASK;
-}
-
-static inline void set_efa_io_tx_buf_desc_phase(struct efa_io_tx_buf_desc *p, uint8_t val)
-{
-	p->ctrl |= val & EFA_IO_TX_BUF_DESC_PHASE_MASK;
-}
-
-static inline uint8_t get_efa_io_tx_buf_desc_first(const struct efa_io_tx_buf_desc *p)
-{
-	return (p->ctrl & EFA_IO_TX_BUF_DESC_FIRST_MASK) >> EFA_IO_TX_BUF_DESC_FIRST_SHIFT;
-}
-
-static inline void set_efa_io_tx_buf_desc_first(struct efa_io_tx_buf_desc *p, uint8_t val)
-{
-	p->ctrl |= (val << EFA_IO_TX_BUF_DESC_FIRST_SHIFT) & EFA_IO_TX_BUF_DESC_FIRST_MASK;
-}
-
-static inline uint8_t get_efa_io_tx_buf_desc_last(const struct efa_io_tx_buf_desc *p)
-{
-	return (p->ctrl & EFA_IO_TX_BUF_DESC_LAST_MASK) >> EFA_IO_TX_BUF_DESC_LAST_SHIFT;
-}
-
-static inline void set_efa_io_tx_buf_desc_last(struct efa_io_tx_buf_desc *p, uint8_t val)
-{
-	p->ctrl |= (val << EFA_IO_TX_BUF_DESC_LAST_SHIFT) & EFA_IO_TX_BUF_DESC_LAST_MASK;
-}
-
-static inline uint8_t get_efa_io_remote_mem_addr_meta_extension(const struct efa_io_remote_mem_addr *p)
-{
-	return (p->ctrl1 & EFA_IO_REMOTE_MEM_ADDR_META_EXTENSION_MASK) >> EFA_IO_REMOTE_MEM_ADDR_META_EXTENSION_SHIFT;
-}
-
-static inline void set_efa_io_remote_mem_addr_meta_extension(struct efa_io_remote_mem_addr *p, uint8_t val)
-{
-	p->ctrl1 |= (val << EFA_IO_REMOTE_MEM_ADDR_META_EXTENSION_SHIFT) & EFA_IO_REMOTE_MEM_ADDR_META_EXTENSION_MASK;
-}
-
-static inline uint8_t get_efa_io_remote_mem_addr_meta_desc(const struct efa_io_remote_mem_addr *p)
-{
-	return (p->ctrl1 & EFA_IO_REMOTE_MEM_ADDR_META_DESC_MASK) >> EFA_IO_REMOTE_MEM_ADDR_META_DESC_SHIFT;
-}
-
-static inline void set_efa_io_remote_mem_addr_meta_desc(struct efa_io_remote_mem_addr *p, uint8_t val)
-{
-	p->ctrl1 |= (val << EFA_IO_REMOTE_MEM_ADDR_META_DESC_SHIFT) & EFA_IO_REMOTE_MEM_ADDR_META_DESC_MASK;
-}
-
-static inline uint8_t get_efa_io_remote_mem_addr_phase(const struct efa_io_remote_mem_addr *p)
-{
-	return p->ctrl & EFA_IO_REMOTE_MEM_ADDR_PHASE_MASK;
-}
-
-static inline void set_efa_io_remote_mem_addr_phase(struct efa_io_remote_mem_addr *p, uint8_t val)
-{
-	p->ctrl |= val & EFA_IO_REMOTE_MEM_ADDR_PHASE_MASK;
-}
-
-static inline uint8_t get_efa_io_remote_mem_addr_first(const struct efa_io_remote_mem_addr *p)
-{
-	return (p->ctrl & EFA_IO_REMOTE_MEM_ADDR_FIRST_MASK) >> EFA_IO_REMOTE_MEM_ADDR_FIRST_SHIFT;
-}
-
-static inline void set_efa_io_remote_mem_addr_first(struct efa_io_remote_mem_addr *p, uint8_t val)
-{
-	p->ctrl |= (val << EFA_IO_REMOTE_MEM_ADDR_FIRST_SHIFT) & EFA_IO_REMOTE_MEM_ADDR_FIRST_MASK;
-}
-
-static inline uint8_t get_efa_io_remote_mem_addr_last(const struct efa_io_remote_mem_addr *p)
-{
-	return (p->ctrl & EFA_IO_REMOTE_MEM_ADDR_LAST_MASK) >> EFA_IO_REMOTE_MEM_ADDR_LAST_SHIFT;
-}
-
-static inline void set_efa_io_remote_mem_addr_last(struct efa_io_remote_mem_addr *p, uint8_t val)
-{
-	p->ctrl |= (val << EFA_IO_REMOTE_MEM_ADDR_LAST_SHIFT) & EFA_IO_REMOTE_MEM_ADDR_LAST_MASK;
-}
-
-static inline uint32_t get_efa_io_rx_desc_lkey(const struct efa_io_rx_desc *p)
-{
-	return p->lkey_ctrl & EFA_IO_RX_DESC_LKEY_MASK;
-}
-
-static inline void set_efa_io_rx_desc_lkey(struct efa_io_rx_desc *p, uint32_t val)
-{
-	p->lkey_ctrl |= val & EFA_IO_RX_DESC_LKEY_MASK;
-}
-
-static inline uint32_t get_efa_io_rx_desc_first(const struct efa_io_rx_desc *p)
-{
-	return (p->lkey_ctrl & EFA_IO_RX_DESC_FIRST_MASK) >> EFA_IO_RX_DESC_FIRST_SHIFT;
-}
-
-static inline void set_efa_io_rx_desc_first(struct efa_io_rx_desc *p, uint32_t val)
-{
-	p->lkey_ctrl |= (val << EFA_IO_RX_DESC_FIRST_SHIFT) & EFA_IO_RX_DESC_FIRST_MASK;
-}
-
-static inline uint32_t get_efa_io_rx_desc_last(const struct efa_io_rx_desc *p)
-{
-	return (p->lkey_ctrl & EFA_IO_RX_DESC_LAST_MASK) >> EFA_IO_RX_DESC_LAST_SHIFT;
-}
-
-static inline void set_efa_io_rx_desc_last(struct efa_io_rx_desc *p, uint32_t val)
-{
-	p->lkey_ctrl |= (val << EFA_IO_RX_DESC_LAST_SHIFT) & EFA_IO_RX_DESC_LAST_MASK;
-}
-
-static inline uint8_t get_efa_io_cdesc_common_phase(const struct efa_io_cdesc_common *p)
-{
-	return p->flags & EFA_IO_CDESC_COMMON_PHASE_MASK;
-}
-
-static inline void set_efa_io_cdesc_common_phase(struct efa_io_cdesc_common *p, uint8_t val)
-{
-	p->flags |= val & EFA_IO_CDESC_COMMON_PHASE_MASK;
-}
-
-static inline uint8_t get_efa_io_cdesc_common_q_type(const struct efa_io_cdesc_common *p)
-{
-	return (p->flags & EFA_IO_CDESC_COMMON_Q_TYPE_MASK) >> EFA_IO_CDESC_COMMON_Q_TYPE_SHIFT;
-}
-
-static inline void set_efa_io_cdesc_common_q_type(struct efa_io_cdesc_common *p, uint8_t val)
-{
-	p->flags |= (val << EFA_IO_CDESC_COMMON_Q_TYPE_SHIFT) & EFA_IO_CDESC_COMMON_Q_TYPE_MASK;
-}
-
-static inline uint8_t get_efa_io_cdesc_common_has_imm(const struct efa_io_cdesc_common *p)
-{
-	return (p->flags & EFA_IO_CDESC_COMMON_HAS_IMM_MASK) >> EFA_IO_CDESC_COMMON_HAS_IMM_SHIFT;
-}
-
-static inline void set_efa_io_cdesc_common_has_imm(struct efa_io_cdesc_common *p, uint8_t val)
-{
-	p->flags |= (val << EFA_IO_CDESC_COMMON_HAS_IMM_SHIFT) & EFA_IO_CDESC_COMMON_HAS_IMM_MASK;
-}
-
-static inline uint8_t get_efa_io_cdesc_common_wide_completion(const struct efa_io_cdesc_common *p)
-{
-	return (p->flags & EFA_IO_CDESC_COMMON_WIDE_COMPLETION_MASK) >> EFA_IO_CDESC_COMMON_WIDE_COMPLETION_SHIFT;
-}
-
-static inline void set_efa_io_cdesc_common_wide_completion(struct efa_io_cdesc_common *p, uint8_t val)
-{
-	p->flags |= (val << EFA_IO_CDESC_COMMON_WIDE_COMPLETION_SHIFT) & EFA_IO_CDESC_COMMON_WIDE_COMPLETION_MASK;
-}
 
 #endif /* _EFA_IO_H_ */

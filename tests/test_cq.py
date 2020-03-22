@@ -5,11 +5,12 @@ Test module for pyverbs' cq module.
 """
 import random
 
+from pyverbs.pyverbs_error import PyverbsError, PyverbsRDMAError
 from pyverbs.cq import CompChannel, CQ, CqInitAttrEx, CQEX
-from pyverbs.pyverbs_error import PyverbsError
 from tests.base import PyverbsAPITestCase
 import pyverbs.enums as e
-import tests.utils as u
+import unittest
+import errno
 
 
 class CQTest(PyverbsAPITestCase):
@@ -117,8 +118,6 @@ class CQEXTest(PyverbsAPITestCase):
             cqe = get_num_cqes(attr)
             cq_init_attrs_ex = CqInitAttrEx(cqe=cqe, wc_flags=0, comp_mask=0, flags=0)
             wc_flags = get_cq_flags_with_caps()
-            if attr_ex.tm_caps.max_ops == 0:
-                wc_flags.remove(e.IBV_WC_EX_WITH_TM_INFO)
             if attr_ex.raw_packet_caps & e.IBV_RAW_PACKET_CAP_CVLAN_STRIPPING == 0:
                 wc_flags.remove(e.IBV_WC_EX_WITH_CVLAN)
             for f in wc_flags:
@@ -159,7 +158,9 @@ class CQEXTest(PyverbsAPITestCase):
                 cq_attrs_ex.cqe = max_cqe + 1 + int(100 * random.random())
                 try:
                     CQEX(ctx, cq_attrs_ex)
-                except PyverbsError as ex:
+                except PyverbsRDMAError as ex:
+                    if ex.error_code == errno.EOPNOTSUPP:
+                        raise unittest.SkipTest('Create extended CQ is not supported')
                     assert 'Failed to create extended CQ' in ex.args[0]
                     assert ' Errno: 22' in ex.args[0]
                 else:
@@ -171,7 +172,9 @@ class CQEXTest(PyverbsAPITestCase):
                 cq_attrs_ex.cqe = get_num_cqes(attr)
                 try:
                     CQEX(ctx, cq_attrs_ex)
-                except PyverbsError as ex:
+                except PyverbsRDMAError as ex:
+                    if ex.error_code == errno.EOPNOTSUPP:
+                        raise unittest.SkipTest('Create extended CQ is not supported')
                     assert 'Failed to create extended CQ' in ex.args[0]
                     assert ' Errno: 22' in ex.args[0]
                 else:
@@ -187,8 +190,6 @@ class CQEXTest(PyverbsAPITestCase):
             cqe = get_num_cqes(attr)
             cq_init_attrs_ex = CqInitAttrEx(cqe=cqe, wc_flags=0, comp_mask=0, flags=0)
             wc_flags = get_cq_flags_with_caps()
-            if attr_ex.tm_caps.max_ops == 0:
-                wc_flags.remove(e.IBV_WC_EX_WITH_TM_INFO)
             if attr_ex.raw_packet_caps & e.IBV_RAW_PACKET_CAP_CVLAN_STRIPPING == 0:
                 wc_flags.remove(e.IBV_WC_EX_WITH_CVLAN)
             for f in wc_flags:
@@ -225,10 +226,9 @@ def get_num_cqes(attr):
 
 def get_cq_flags_with_no_caps():
     wc_flags = list(e.ibv_create_cq_wc_flags)
-    wc_flags.remove(e.IBV_WC_EX_WITH_TM_INFO)
     wc_flags.remove(e.IBV_WC_EX_WITH_CVLAN)
     return wc_flags
 
 
 def get_cq_flags_with_caps():
-    return [e.IBV_WC_EX_WITH_TM_INFO, e.IBV_WC_EX_WITH_CVLAN]
+    return [e.IBV_WC_EX_WITH_CVLAN]

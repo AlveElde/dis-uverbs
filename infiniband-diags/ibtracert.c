@@ -550,6 +550,8 @@ static Node *find_mcpath(ib_portid_t * from, int mlid)
 
 	if (get_node(node, port, from) < 0) {
 		IBWARN("can't reach node %s", portid2str(from));
+		free(node);
+		free(port);
 		return NULL;
 	}
 
@@ -557,6 +559,8 @@ static Node *find_mcpath(ib_portid_t * from, int mlid)
 	if ((r = new_node(node, port, from, 0)) > 0) {
 		if (node->type != IB_NODE_SWITCH) {
 			IBWARN("ibtracert from CA to CA is unsupported");
+			free(node);
+			free(port);
 			return NULL;	/* ibtracert from host to itself is unsupported */
 		}
 
@@ -855,8 +859,8 @@ static int get_route(char *srcid, char *dstid) {
 
 int main(int argc, char **argv)
 {
-	char dstbuf[20];
-	char srcbuf[20];
+	char dstbuf[21];
+	char srcbuf[21];
 	char portsbuf[80];
 	char *p_first;
 	int len, i;

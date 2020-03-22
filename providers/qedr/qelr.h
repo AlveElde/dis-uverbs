@@ -46,6 +46,7 @@
 #define writel(b, p) (*(uint32_t *)(p) = (b))
 #define writeq(b, p) (*(uint64_t *)(p) = (b))
 
+#include "qelr_abi.h"
 #include "qelr_hsi.h"
 #include "qelr_chain.h"
 
@@ -114,8 +115,16 @@ struct qelr_buf {
 					 */
 };
 
+#define IS_IWARP(_dev)		(_dev->node_type == IBV_NODE_RNIC)
+#define IS_ROCE(_dev)		(_dev->node_type == IBV_NODE_CA)
+
 struct qelr_device {
 	struct verbs_device ibv_dev;
+};
+
+enum qelr_dpm_flags {
+	QELR_DPM_FLAGS_ENHANCED = (1 << 0),
+	QELR_DPM_FLAGS_LEGACY	= (1 << 1),
 };
 
 struct qelr_devctx {
@@ -123,9 +132,12 @@ struct qelr_devctx {
 	FILE			*dbg_fp;
 	void			*db_addr;
 	uint64_t		db_pa;
+	struct qedr_user_db_rec	db_rec_addr_dummy;
 	uint32_t		db_size;
-	uint8_t			disable_edpm;
+	enum qelr_dpm_flags	dpm_flags;
 	uint32_t		kernel_page_size;
+	uint16_t		ldpm_limit_size;
+	uint8_t			edpm_trans_size;
 
 	uint32_t		max_send_wr;
 	uint32_t		max_recv_wr;
@@ -157,6 +169,9 @@ struct qelr_cq {
 
 	void			*db_addr;
 	union db_prod64		db;
+	/* Doorbell recovery entry address */
+	void			*db_rec_map;
+	struct qedr_user_db_rec *db_rec_addr;
 
 	uint8_t			chain_toggle;
 	union rdma_cqe		*latest_cqe;
@@ -195,6 +210,9 @@ struct qelr_qp_hwq_info {
 	void					*db;      /* Doorbell address */
 	void					*edpm_db;
 	union db_prod32				db_data;  /* Doorbell data */
+	/* Doorbell recovery entry address */
+	void					*db_rec_map;
+	struct qedr_user_db_rec			*db_rec_addr;
 	void					*iwarp_db2;
 	union db_prod32				iwarp_db2_data;
 
@@ -212,6 +230,7 @@ struct qelr_rdma_ext {
 			       ROCE_REQ_MAX_INLINE_DATA_SIZE)
 struct qelr_dpm {
 	uint8_t			is_edpm;
+	uint8_t			is_ldpm;
 	union {
 		struct db_roce_dpm_data	data;
 		uint64_t raw;

@@ -5,12 +5,8 @@ from pyverbs.pyverbs_error import PyverbsUserError, PyverbsError
 from pyverbs.base import PyverbsRDMAErrno
 cimport pyverbs.libibverbs_enums as e
 from pyverbs.addr cimport AH
-
-cdef extern from 'stdlib.h':
-    void *malloc(size_t size)
-    void free(void *ptr)
-cdef extern from 'string.h':
-    void *memcpy(void *dest, const void *src, size_t n)
+from libc.stdlib cimport free, malloc
+from libc.string cimport memcpy
 
 
 cdef class SGE(PyverbsCM):
@@ -21,7 +17,7 @@ cdef class SGE(PyverbsCM):
     write can't be done using memcpy that relies on CPU-specific optimizations.
     A SGE has no way to tell which memory it is using.
     """
-    def __cinit__(self, addr, length, lkey):
+    def __init__(self, addr, length, lkey):
         """
         Initializes a SGE object.
         :param addr: The address to be used for read/write
@@ -29,6 +25,7 @@ cdef class SGE(PyverbsCM):
         :param lkey: Local key of the used MR/DMMR
         :return: A SGE object
         """
+        super().__init__()
         self.sge = <v.ibv_sge*>malloc(sizeof(v.ibv_sge))
         if self.sge == NULL:
             raise PyverbsError('Failed to allocate an SGE')
@@ -84,8 +81,8 @@ cdef class SGE(PyverbsCM):
 
 
 cdef class RecvWR(PyverbsCM):
-    def __cinit__(self, wr_id=0, num_sge=0, sg=None,
-                  RecvWR next_wr=None):
+    def __init__(self, wr_id=0, num_sge=0, sg=None,
+                 RecvWR next_wr=None):
         """
         Initializes a RecvWR object.
         :param wr_id: A user-defined WR ID
@@ -94,6 +91,7 @@ cdef class RecvWR(PyverbsCM):
         :param: next_wr: The next WR in the list
         :return: A RecvWR object
         """
+        super().__init__()
         cdef v.ibv_sge *dst
         if num_sge < 1 or sg is None:
             raise PyverbsUserError('A WR needs at least one SGE')
@@ -145,8 +143,8 @@ cdef class RecvWR(PyverbsCM):
 
 
 cdef class SendWR(PyverbsCM):
-    def __cinit__(self, wr_id=0, opcode=e.IBV_WR_SEND, num_sge=0, sg = None,
-                  send_flags=e.IBV_SEND_SIGNALED, SendWR next_wr = None):
+    def __init__(self, wr_id=0, opcode=e.IBV_WR_SEND, num_sge=0, sg = None,
+                 send_flags=e.IBV_SEND_SIGNALED, SendWR next_wr = None):
         """
         Initialize a SendWR object with user-provided or default values.
         :param wr_id: A user-defined WR ID
@@ -157,6 +155,8 @@ cdef class SendWR(PyverbsCM):
         :return: An initialized SendWR object
         """
         cdef v.ibv_sge *dst
+
+        super().__init__()
         if num_sge < 1 or sg is None:
             raise PyverbsUserError('A WR needs at least one SGE')
         self.send_wr.sg_list = <v.ibv_sge*>malloc(num_sge * sizeof(v.ibv_sge))
@@ -170,6 +170,7 @@ cdef class SendWR(PyverbsCM):
             self.send_wr.next = &next_wr.send_wr
         self.send_wr.opcode = opcode
         self.send_wr.send_flags = send_flags
+        self.ah = None
 
     def __dealloc(self):
         self.close()
@@ -236,6 +237,7 @@ cdef class SendWR(PyverbsCM):
         :param rqkey: The remote QKey, authorizing access to the destination QP
         :return: None
         """
+        self.ah = ah
         self.send_wr.wr.ud.ah = ah.ah
         self.send_wr.wr.ud.remote_qpn = rqpn
         self.send_wr.wr.ud.remote_qkey = rqkey

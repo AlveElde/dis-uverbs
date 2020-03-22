@@ -115,6 +115,22 @@ enum mlx5_ib_devx_obj_methods {
 	MLX5_IB_METHOD_DEVX_OBJ_ASYNC_QUERY,
 };
 
+enum mlx5_ib_var_alloc_attrs {
+	MLX5_IB_ATTR_VAR_OBJ_ALLOC_HANDLE = (1U << UVERBS_ID_NS_SHIFT),
+	MLX5_IB_ATTR_VAR_OBJ_ALLOC_MMAP_OFFSET,
+	MLX5_IB_ATTR_VAR_OBJ_ALLOC_MMAP_LENGTH,
+	MLX5_IB_ATTR_VAR_OBJ_ALLOC_PAGE_ID,
+};
+
+enum mlx5_ib_var_obj_destroy_attrs {
+	MLX5_IB_ATTR_VAR_OBJ_DESTROY_HANDLE = (1U << UVERBS_ID_NS_SHIFT),
+};
+
+enum mlx5_ib_var_obj_methods {
+	MLX5_IB_METHOD_VAR_OBJ_ALLOC = (1U << UVERBS_ID_NS_SHIFT),
+	MLX5_IB_METHOD_VAR_OBJ_DESTROY,
+};
+
 enum mlx5_ib_devx_umem_reg_attrs {
 	MLX5_IB_ATTR_DEVX_UMEM_REG_HANDLE = (1U << UVERBS_ID_NS_SHIFT),
 	MLX5_IB_ATTR_DEVX_UMEM_REG_ADDR,
@@ -125,6 +141,22 @@ enum mlx5_ib_devx_umem_reg_attrs {
 
 enum mlx5_ib_devx_umem_dereg_attrs {
 	MLX5_IB_ATTR_DEVX_UMEM_DEREG_HANDLE = (1U << UVERBS_ID_NS_SHIFT),
+};
+
+enum mlx5_ib_pp_obj_methods {
+	MLX5_IB_METHOD_PP_OBJ_ALLOC = (1U << UVERBS_ID_NS_SHIFT),
+	MLX5_IB_METHOD_PP_OBJ_DESTROY,
+};
+
+enum mlx5_ib_pp_alloc_attrs {
+	MLX5_IB_ATTR_PP_OBJ_ALLOC_HANDLE = (1U << UVERBS_ID_NS_SHIFT),
+	MLX5_IB_ATTR_PP_OBJ_ALLOC_CTX,
+	MLX5_IB_ATTR_PP_OBJ_ALLOC_FLAGS,
+	MLX5_IB_ATTR_PP_OBJ_ALLOC_INDEX,
+};
+
+enum mlx5_ib_pp_obj_destroy_attrs {
+	MLX5_IB_ATTR_PP_OBJ_DESTROY_HANDLE = (1U << UVERBS_ID_NS_SHIFT),
 };
 
 enum mlx5_ib_devx_umem_methods {
@@ -156,6 +188,8 @@ enum mlx5_ib_objects {
 	MLX5_IB_OBJECT_FLOW_MATCHER,
 	MLX5_IB_OBJECT_DEVX_ASYNC_CMD_FD,
 	MLX5_IB_OBJECT_DEVX_ASYNC_EVENT_FD,
+	MLX5_IB_OBJECT_VAR,
+	MLX5_IB_OBJECT_PP,
 };
 
 enum mlx5_ib_flow_matcher_create_attrs {
@@ -198,6 +232,7 @@ enum mlx5_ib_create_flow_attrs {
 	MLX5_IB_ATTR_CREATE_FLOW_ARR_FLOW_ACTIONS,
 	MLX5_IB_ATTR_CREATE_FLOW_TAG,
 	MLX5_IB_ATTR_CREATE_FLOW_ARR_COUNTERS_DEVX,
+	MLX5_IB_ATTR_CREATE_FLOW_ARR_COUNTERS_DEVX_OFFSET,
 };
 
 enum mlx5_ib_destoy_flow_attrs {

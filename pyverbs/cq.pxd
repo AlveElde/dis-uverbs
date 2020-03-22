@@ -19,10 +19,14 @@ cdef class CQ(PyverbsCM):
     cdef object context
     cdef add_ref(self, obj)
     cdef object qps
+    cdef object srqs
+    cdef object channel
+    cdef object num_events
 
 cdef class CqInitAttrEx(PyverbsObject):
     cdef v.ibv_cq_init_attr_ex attr
     cdef object channel
+    cdef object parent_domain
 
 cdef class CQEX(PyverbsCM):
     cdef v.ibv_cq_ex *cq
@@ -31,6 +35,7 @@ cdef class CQEX(PyverbsCM):
     cdef object context
     cdef add_ref(self, obj)
     cdef object qps
+    cdef object srqs
 
 cdef class WC(PyverbsObject):
     cdef v.ibv_wc wc

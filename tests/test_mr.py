@@ -3,13 +3,12 @@
 """
 Test module for pyverbs' mr module.
 """
-from itertools import combinations as com
 import unittest
 import random
+import errno
 
 from pyverbs.pyverbs_error import PyverbsRDMAError, PyverbsError
 from tests.base import PyverbsAPITestCase
-from pyverbs.base import PyverbsRDMAErrno
 from pyverbs.mr import MR, MW, DMMR
 import pyverbs.device as d
 from pyverbs.pd import PD
@@ -44,20 +43,6 @@ class MRTest(PyverbsAPITestCase):
                 for f in flags:
                     with MR(pd, u.get_mr_length(), f) as mr:
                         mr.close()
-
-    @staticmethod
-    def test_reg_mr_bad_flow():
-        """
-        Verify that trying to register a MR with None PD fails
-        """
-        try:
-            # Use the simplest access flags necessary
-            MR(None, random.randint(0, 10000), e.IBV_ACCESS_LOCAL_WRITE)
-        except TypeError as te:
-            assert 'expected pyverbs.pd.PD' in te.args[0]
-            assert 'got NoneType' in te.args[0]
-        else:
-            raise PyverbsRDMAErrno('Created a MR with None PD')
 
     def test_dereg_mr_twice(self):
         """
@@ -175,8 +160,13 @@ class MWTest(PyverbsAPITestCase):
         """
         for ctx, attr, attr_ex in self.devices:
             with PD(ctx) as pd:
-                with MW(pd, e.IBV_MW_TYPE_1):
-                    pass
+                try:
+                    with MW(pd, e.IBV_MW_TYPE_1):
+                        pass
+                except PyverbsRDMAError as ex:
+                    if ex.error_code == errno.EOPNOTSUPP:
+                        raise unittest.SkipTest('Create memory window of type 1 is not supported')
+                    raise ex
 
     def test_reg_mw_type2(self):
         """
@@ -184,8 +174,13 @@ class MWTest(PyverbsAPITestCase):
         """
         for ctx, attr, attr_ex in self.devices:
             with PD(ctx) as pd:
-                with MW(pd, e.IBV_MW_TYPE_2):
-                    pass
+                try:
+                    with MW(pd, e.IBV_MW_TYPE_2):
+                        pass
+                except PyverbsRDMAError as ex:
+                    if ex.error_code == errno.EOPNOTSUPP:
+                        raise unittest.SkipTest('Create memory window of type 2 is not supported')
+                    raise ex
 
     def test_dereg_mw_type1(self):
         """
@@ -193,8 +188,13 @@ class MWTest(PyverbsAPITestCase):
         """
         for ctx, attr, attr_ex in self.devices:
             with PD(ctx) as pd:
-                with MW(pd, e.IBV_MW_TYPE_1) as mw:
-                    mw.close()
+                try:
+                    with MW(pd, e.IBV_MW_TYPE_1) as mw:
+                        mw.close()
+                except PyverbsRDMAError as ex:
+                    if ex.error_code == errno.EOPNOTSUPP:
+                        raise unittest.SkipTest('Create memory window of type 1 is not supported')
+                    raise ex
 
     def test_dereg_mw_type2(self):
         """
@@ -202,8 +202,13 @@ class MWTest(PyverbsAPITestCase):
         """
         for ctx, attr, attr_ex in self.devices:
             with PD(ctx) as pd:
-                with MW(pd, e.IBV_MW_TYPE_2) as mw:
-                    mw.close()
+                try:
+                    with MW(pd, e.IBV_MW_TYPE_2) as mw:
+                        mw.close()
+                except PyverbsRDMAError as ex:
+                    if ex.error_code == errno.EOPNOTSUPP:
+                        raise unittest.SkipTest('Create memory window of type 2 is not supported')
+                    raise ex
 
     def test_reg_mw_wrong_type(self):
         """

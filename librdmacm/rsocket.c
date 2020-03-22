@@ -1453,9 +1453,14 @@ connected:
 
 		rs->state = rs_connect_rdwr;
 		break;
+	case rs_connect_error:
+	case rs_disconnected:
+	case rs_error:
+		ret = ERR(ENOTCONN);
+		goto unlock;
 	default:
-		ret = ERR(EINVAL);
-		break;
+		ret = (rs->state & rs_connected) ? 0 : ERR(EINVAL);
+		goto unlock;
 	}
 
 	if (ret) {
@@ -1466,6 +1471,7 @@ connected:
 			rs->err = errno;
 		}
 	}
+unlock:
 	fastlock_release(&rs->slock);
 	return ret;
 }
@@ -3038,7 +3044,7 @@ static int rs_poll_enter(void)
 	pthread_mutex_lock(&mut);
 	if (suspendpoll) {
 		pthread_mutex_unlock(&mut);
-		pthread_yield();
+		sched_yield();
 		return -EBUSY;
 	}
 

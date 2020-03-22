@@ -50,6 +50,8 @@
 #include "main.h"
 #include "verbs.h"
 
+static void bnxt_re_free_context(struct ibv_context *ibvctx);
+
 #define PCI_VENDOR_ID_BROADCOM		0x14E4
 
 #define CNA(v, d) VERBS_PCI_MATCH(PCI_VENDOR_ID_##v, d, NULL)
@@ -75,10 +77,16 @@ static const struct verbs_match_ent cna_table[] = {
 	CNA(BROADCOM, 0x16EF),  /* BCM57416 NPAR */
 	CNA(BROADCOM, 0x16F0),  /* BCM58730 */
 	CNA(BROADCOM, 0x16F1),  /* BCM57452 */
-	CNA(BROADCOM, 0x1750),	/* BCM57500 */
+	CNA(BROADCOM, 0x1750),	/* BCM57508 */
+	CNA(BROADCOM, 0x1751),	/* BCM57504 */
+	CNA(BROADCOM, 0x1752),	/* BCM57502 */
+	CNA(BROADCOM, 0x1803),	/* BCM57508 NPAR */
+	CNA(BROADCOM, 0x1804),	/* BCM57504 NPAR */
+	CNA(BROADCOM, 0x1805),	/* BCM57502 NPAR */
+	CNA(BROADCOM, 0x1807),	/* BCM5750x VF */
 	CNA(BROADCOM, 0xD800),  /* BCM880xx VF */
 	CNA(BROADCOM, 0xD802),  /* BCM58802 */
-	CNA(BROADCOM, 0xD804),   /* BCM8804 SR */
+	CNA(BROADCOM, 0xD804),  /* BCM8804 SR */
 	{}
 };
 
@@ -107,12 +115,15 @@ static const struct verbs_context_ops bnxt_re_cntx_ops = {
 	.post_send     = bnxt_re_post_send,
 	.post_recv     = bnxt_re_post_recv,
 	.create_ah     = bnxt_re_create_ah,
-	.destroy_ah    = bnxt_re_destroy_ah
+	.destroy_ah    = bnxt_re_destroy_ah,
+	.free_context  = bnxt_re_free_context,
 };
 
 bool bnxt_re_is_chip_gen_p5(struct bnxt_re_chip_ctx *cctx)
 {
-	return cctx->chip_num == CHIP_NUM_57500;
+	return (cctx->chip_num == CHIP_NUM_57508 ||
+		cctx->chip_num == CHIP_NUM_57504 ||
+		cctx->chip_num == CHIP_NUM_57502);
 }
 
 /* Context Init functions */
@@ -210,6 +221,5 @@ static const struct verbs_device_ops bnxt_re_dev_ops = {
 	.match_table = cna_table,
 	.alloc_device = bnxt_re_device_alloc,
 	.alloc_context = bnxt_re_alloc_context,
-	.free_context = bnxt_re_free_context,
 };
 PROVIDER_DRIVER(bnxt_re, bnxt_re_dev_ops);

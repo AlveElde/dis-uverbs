@@ -23,7 +23,7 @@
 
 %define         git_ver %{nil}
 Name:           rdma-core
-Version:        26.0
+Version:        29.0
 Release:        0
 Summary:        RDMA core userspace libraries and daemons
 License:        GPL-2.0-only OR BSD-2-Clause
@@ -72,7 +72,11 @@ BuildRequires:  python3-Cython
 BuildRequires:  python3-devel
 %endif
 %ifnarch s390 s390x
+%if 0%{?suse_version} >= 1550
+BuildRequires:  valgrind-client-headers
+%else
 BuildRequires:  valgrind-devel
+%endif
 %endif
 BuildRequires:  systemd-rpm-macros
 BuildRequires:  pkgconfig(libnl-3.0)
@@ -122,7 +126,7 @@ BuildRequires:  ninja
 %else
 # Fallback to make otherwise
 BuildRequires:  make
-%define make_jobs make -v %{?_smp_mflags}
+%define make_jobs make VERBOSE=1 %{?_smp_mflags}
 %define cmake_install DESTDIR=%{buildroot} make install
 %endif
 
@@ -193,8 +197,7 @@ Requires:       %{efa_lname} = %{version}-%{release}
 Requires:       %{mlx4_lname} = %{version}-%{release}
 Requires:       %{mlx5_lname} = %{version}-%{release}
 %endif
-# Recommended packages for rxe_cfg
-Recommends:     ethtool
+# Recommended packages for rxe
 Recommends:     iproute2
 
 %description -n libibverbs
@@ -334,7 +337,9 @@ librdmacm provides a userspace RDMA Communication Management API.
 
 %package -n rsocket
 Summary:        Preloadable library to turn the socket API RDMA-aware
+# Older librdmacm-tools used to provide rsocket
 Group:          System/Libraries
+Conflicts:      librdmacm-tools < 2
 
 %description -n rsocket
 Existing applications can make use of rsockets through the use this
@@ -344,6 +349,8 @@ manpage for details.
 %package -n librdmacm-utils
 Summary:        Examples for the librdmacm library
 Group:          Productivity/Networking/Other
+Obsoletes:      librdmacm-tools < %{version}
+Provides:       librdmacm-tools = %{version}
 
 %description -n librdmacm-utils
 Example test programs for the librdmacm library.
@@ -498,8 +505,8 @@ rm -rf %{buildroot}/%{_sbindir}/srp_daemon.sh
 
 %post
 # we ship udev rules, so trigger an update.
-/sbin/udevadm trigger --subsystem-match=infiniband --action=change || true
-/sbin/udevadm trigger --subsystem-match=infiniband_mad --action=change || true
+%{_bindir}/udevadm trigger --subsystem-match=infiniband --action=change || true
+%{_bindir}/udevadm trigger --subsystem-match=infiniband_mad --action=change || true
 
 #
 # ibacm
@@ -525,7 +532,7 @@ rm -rf %{buildroot}/%{_sbindir}/srp_daemon.sh
 %post -n srp_daemon
 %service_add_post srp_daemon.service
 # we ship udev rules, so trigger an update.
-/sbin/udevadm trigger --subsystem-match=infiniband_mad --action=change
+%{_bindir}/udevadm trigger --subsystem-match=infiniband_mad --action=change
 
 %preun -n srp_daemon
 %service_del_preun srp_daemon.service
@@ -643,9 +650,7 @@ rm -rf %{buildroot}/%{_sbindir}/srp_daemon.sh
 %doc %{_docdir}/%{name}-%{version}/libibverbs.md
 %doc %{_docdir}/%{name}-%{version}/rxe.md
 %doc %{_docdir}/%{name}-%{version}/tag_matching.md
-%{_bindir}/rxe_cfg
 %{_mandir}/man7/rxe*
-%{_mandir}/man8/rxe*
 
 %files -n libibnetdisc%{ibnetdisc_major}
 %defattr(-, root, root)
@@ -683,10 +688,10 @@ rm -rf %{buildroot}/%{_sbindir}/srp_daemon.sh
 %config(noreplace) %{_sysconfdir}/rdma/ibacm_opts.cfg
 %{_bindir}/ib_acme
 %{_sbindir}/ibacm
-%{_mandir}/man1/ibacm.*
 %{_mandir}/man1/ib_acme.*
 %{_mandir}/man7/ibacm.*
 %{_mandir}/man7/ibacm_prov.*
+%{_mandir}/man8/ibacm.*
 %{_unitdir}/ibacm.service
 %{_unitdir}/ibacm.socket
 %dir %{_libdir}/ibacm
@@ -833,10 +838,10 @@ rm -rf %{buildroot}/%{_sbindir}/srp_daemon.sh
 %{_sbindir}/srp_daemon
 %{_sbindir}/run_srp_daemon
 %{_sbindir}/rcsrp_daemon
-%{_mandir}/man1/ibsrpdm.1*
-%{_mandir}/man1/srp_daemon.1*
 %{_mandir}/man5/srp_daemon.service.5*
 %{_mandir}/man5/srp_daemon_port@.service.5*
+%{_mandir}/man8/ibsrpdm.8*
+%{_mandir}/man8/srp_daemon.8*
 %doc %{_docdir}/%{name}-%{version}/ibsrpdm.md
 
 %files -n rdma-ndd
@@ -850,6 +855,7 @@ rm -rf %{buildroot}/%{_sbindir}/srp_daemon.sh
 %if %{with_pyverbs}
 %files -n python3-pyverbs
 %{python3_sitearch}/pyverbs
+%dir %{_docdir}/%{name}-%{version}/tests/
 %{_docdir}/%{name}-%{version}/tests/*.py
 %endif
 
