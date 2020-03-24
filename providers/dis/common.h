@@ -1,4 +1,9 @@
+#ifndef __DIS_COMMON_H__
+#define __DIS_COMMON_H__
+
 #include <stdio.h>
+
+#define DEBUG
 
 #ifdef DEBUG
 #define DEBUG_PRINT 1
@@ -17,3 +22,5 @@ do { \
 #define DIS_STATUS_START    "Started.\n"
 #define DIS_STATUS_COMPLETE "Completed.\n"
 #define DIS_STATUS_FAIL     "Failed.\n"
+
+#endif /* __DIS_COMMON_H__ */

@@ -1,4 +1,7 @@
 /* SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-2-Clause) */
+#ifndef __DIS_H__
+#define __DIS_H__
+
 #include <infiniband/driver.h>
 #include <infiniband/verbs.h>
 
@@ -6,23 +9,6 @@
 
 #define DIS_ROPCIE_NAME "dis-ropcie"
 
-struct dis_device {
-    struct verbs_device ibv_dev;
-};
-
-struct dis_context {
-    struct verbs_context ibv_ctx;
-};
 
 
-static inline struct dis_context *to_dis_ctx(struct ibv_context *ibv_ctx)
-{
-    return container_of(ibv_ctx, struct dis_context, ibv_ctx.context);
-}
-
-static inline struct dis_device *to_dis_dev(struct ibv_device *ibv_dev)
-{
-    return container_of(ibv_dev, struct dis_device, ibv_dev.device);
-}
-
-bool dis_match_device(struct verbs_sysfs_dev *sysfs_dev);
+#endif /* __DIS_H__ */

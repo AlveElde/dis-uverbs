@@ -1,6 +1,29 @@
 /* SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-2-Clause) */
+#ifndef __DIS_VERBS_H__
+#define __DIS_VERBS_H__
+
 #include <infiniband/verbs.h>
 #include <infiniband/driver.h>
+
+struct dis_device {
+    struct verbs_device ibv_dev;
+};
+
+struct dis_context {
+    struct verbs_context ibv_ctx;
+};
+
+
+static inline struct dis_context *to_dis_ctx(struct ibv_context *ibv_ctx)
+{
+    return container_of(ibv_ctx, struct dis_context, ibv_ctx.context);
+}
+
+static inline struct dis_device *to_dis_dev(struct ibv_device *ibv_dev)
+{
+    return container_of(ibv_dev, struct dis_device, ibv_dev.device);
+}
+
 
 // Device verbs.
 int dis_query_device(struct ibv_context *ibv_ctx,
@@ -26,11 +49,11 @@ struct ibv_cq *dis_create_cq(struct ibv_context *ibv_ctx,
                                 int cqe_max, 
                                 struct ibv_comp_channel *ibv_comp_ch, 
                                 int vec);
-int dis_poll_cq(struct ibv_cq *ibvcq, int nwc, struct ibv_wc *wc);
+int dis_poll_cq(struct ibv_cq *ibv_cq, int nwc, struct ibv_wc *wc);
 //int dis_notify_cq();
 //int dis_cq_event();
 //int dis_resize_cq();
-int dis_destroy_cq(struct ibv_cq *ibvcq);
+int dis_destroy_cq(struct ibv_cq *ibv_cq);
 
 // Shared Receive Queue verbs.
 //truct ibv_srq *dis_create_srq();
@@ -63,3 +86,5 @@ int dis_post_recv(struct ibv_qp *ibv_qp,
 // Address Handle verbs.
 struct ibv_ah *dis_create_ah(struct ibv_pd *ibv_pd, struct ibv_ah_attr *attr);
 int dis_destroy_ah(struct ibv_ah *ibv_ah);
+
+#endif /* __DIS_VERBS_H__ */
