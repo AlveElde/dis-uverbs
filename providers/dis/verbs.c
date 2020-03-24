@@ -1,57 +1,46 @@
 /* SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-2-Clause) */
+#include <stdio.h>
+
 #include "verbs.h"
+#include "common.h"
 
 int dis_query_device(struct ibv_context *ibv_ctx, struct ibv_device_attr *attr)
 {
-    // attr->fw_ver            = 0;
+	int ret;
+	uint64_t raw_fw_ver;
+	struct ibv_query_device cmd;
+	printf_debug(DIS_STATUS_START);
 
-    // attr->node_guid         = 0;
-    // attr->sys_image_guid    = 0;
-    // attr->max_mr_size       = 0;
-    // attr->page_size_cap     = 0;
-    // attr->vendor_id         = 0;
-    // attr->vendor_part_id    = 0;
-    // attr->hw_ver            = 0;
-    // attr->max_qp            = 0;
-    // attr->max_qp_wr         = 0;
-    // attr->device_cap_flags  = 0;
-    // attr->max_sge           = 0;
-    // attr->max_sge_rd	    = 0;
-	// attr->max_cq		    = 0;
-	// attr->max_cqe	        = 0;
-	// attr->max_mr	    	= 0;
-	// attr->max_pd		    = 0;
-	// attr->max_qp_rd_atom    = 0;
-	// attr->max_ee_rd_atom	= 0;
-	// attr->max_res_rd_atom	= 0;
-	// attr->max_qp_init_rd_atom	    = 0;
-	// attr->max_ee_init_rd_atom	    = 0;
-	// attr->atomic_cap		= 0;
-	// attr->max_ee			= 0;
-	// attr->max_rdd			= 0;
-	// attr->max_mw			= 0;
-	// attr->max_raw_ipv6_qp	= 0;
-	// attr->max_raw_ethy_qp	= 0;
-	// attr->max_mcast_grp		= 0;
-	// attr->max_mcast_qp_attach       = 0;
-	// attr->max_total_mcast_qp_attach	= 0;
-	// attr->max_ah			= 0;
-	// attr->max_fmr			= 0;
-	// attr->max_map_per_fmr	= 0;
-	// attr->max_srq			= 0;
-	// attr->max_srq_wr		= 0;
-	// attr->max_srq_sge		= 0;
-	// attr->max_pkeys			= 0;
-	// attr->local_ca_ack_delay        = 0;
-	// attr->phys_port_cnt		= 0;
-	return ENOSYS;
+	memset(&cmd, 0, sizeof(cmd));
+
+	ret = ibv_cmd_query_device(ibv_ctx, attr, &raw_fw_ver, &cmd, sizeof(cmd));
+	if (ret) {
+		printf_debug(DIS_STATUS_FAIL);
+		return ret;
+	}
+
+	printf_debug(DIS_STATUS_COMPLETE);
+	return 0;
 }
 
 int dis_query_port(struct ibv_context *ibv_ctx, 
 					uint8_t port, 
 					struct ibv_port_attr *attr)
 {
-	return ENOSYS;
+	int ret;
+	struct ibv_query_port cmd;
+	printf_debug(DIS_STATUS_START);
+
+	memset(&cmd, 0, sizeof(cmd));
+
+	ret = ibv_cmd_query_port(ibv_ctx, port, attr, &cmd, sizeof(cmd));
+	if (ret) {
+		printf_debug(DIS_STATUS_FAIL);
+		return ret;
+	}
+
+	printf_debug(DIS_STATUS_COMPLETE);
+	return 0;
 }
 
 struct ibv_pd *dis_alloc_pd(struct ibv_context *ibv_ctx)

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-2-Clause) */
-#include <infiniband/driver.h>
 #include <infiniband/verbs.h>
+#include <infiniband/driver.h>
 
 // Device verbs.
 int dis_query_device(struct ibv_context *ibv_ctx,

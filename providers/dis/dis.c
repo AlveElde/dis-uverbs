@@ -1,20 +1,13 @@
 /* SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-2-Clause) */
 #include <stdlib.h>
+#include <stdio.h>
+#include <stddef.h>
 
 #include "dis.h"
 #include "verbs.h"
+#include "common.h"
 
-#ifndef PCI_VENDOR_ID_DIS
-#define PCI_VENDOR_ID_DIS 0x0
-#endif
-
-
-static const struct verbs_match_ent hca_table[] = {
-	VERBS_DRIVER_ID(RDMA_DRIVER_UNKNOWN),
-	//VERBS_NAME_MATCH("dis", NULL),
-	//{},
-};
-
+#define DIS_ABI_VERSION	1
 
 static void dis_free_context(struct ibv_context *ibv_ctx);
 static const struct verbs_context_ops dis_ctx_ops = {
@@ -54,6 +47,18 @@ static const struct verbs_context_ops dis_ctx_ops = {
 	.destroy_ah    	= dis_destroy_ah,
 };
 
+bool dis_match_device(struct verbs_sysfs_dev *sysfs_dev)
+{
+	int ret;
+
+	ret = strncmp(sysfs_dev->ibdev_name, DIS_ROPCIE_NAME, strlen(DIS_ROPCIE_NAME));
+	if (!ret) {
+		return true;
+	}
+
+	return false;
+}
+
 static struct verbs_context *dis_alloc_context(struct ibv_device *ibv_dev, 
 												int cmd_fd, 
 												void *private_data)
@@ -63,7 +68,7 @@ static struct verbs_context *dis_alloc_context(struct ibv_device *ibv_dev,
 	struct ib_uverbs_get_context_resp get_ctx_resp;
 
 	ctx = verbs_init_and_alloc_context(ibv_dev, cmd_fd, ctx, ibv_ctx, 
-										RDMA_DRIVER_UNKNOWN);
+										1234);
 
 	if (!ctx) {
 		return NULL;
@@ -90,7 +95,7 @@ static void dis_free_context(struct ibv_context *ibv_ctx)
 	free(ctx);
 }
 
-static struct verbs_device *dis_device_alloc(struct verbs_sysfs_dev *sysfs_dev)
+static struct verbs_device *dis_alloc_device(struct verbs_sysfs_dev *sysfs_dev)
 {
 	struct dis_device *dev;
 
@@ -110,11 +115,11 @@ static void dis_uninit_device(struct verbs_device *verbs_dev)
 }
 
 static const struct verbs_device_ops dis_device_ops = {
-	.name 					= "dis",
+	.name 					= DIS_ROPCIE_NAME,
 	.match_min_abi_version 	= DIS_ABI_VERSION,
 	.match_max_abi_version 	= DIS_ABI_VERSION,
-	.match_table 			= hca_table,
-	.alloc_device 			= dis_device_alloc,
+	.match_device			= dis_match_device,
+	.alloc_device 			= dis_alloc_device,
 	.uninit_device  		= dis_uninit_device,
 	.alloc_context 			= dis_alloc_context,
 };

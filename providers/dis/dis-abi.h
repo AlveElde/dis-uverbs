@@ -2,8 +2,8 @@
 #ifndef _DIS_ABI_H
 #define _DIS_ABI_H
 
-#include <infiniband/kern-abi.h>
-#include <rdma/dis-abi.h>
-#include <kernel-abi/dis-abi.h>
+// #include <infiniband/kern-abi.h>
+// #include <rdma/dis-abi.h>
+// #include <kernel-abi/dis-abi.h>
 
 #endif /* _DIS_ABI_H */

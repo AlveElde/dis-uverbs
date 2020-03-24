@@ -2,8 +2,9 @@
 #include <infiniband/driver.h>
 #include <infiniband/verbs.h>
 
-#include "dis-abi.h"
+// #include "dis-abi.h"
 
+#define DIS_ROPCIE_NAME "dis-ropcie"
 
 struct dis_device {
     struct verbs_device ibv_dev;
@@ -23,3 +24,5 @@ static inline struct dis_device *to_dis_dev(struct ibv_device *ibv_dev)
 {
     return container_of(ibv_dev, struct dis_device, ibv_dev.device);
 }
+
+bool dis_match_device(struct verbs_sysfs_dev *sysfs_dev);
