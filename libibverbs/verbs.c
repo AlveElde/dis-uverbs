@@ -283,9 +283,10 @@ LATEST_SYMVER_FUNC(ibv_alloc_pd, 1_1, "IBVERBS_1.1",
 	struct ibv_pd *pd;
 
 	pd = get_ops(context)->alloc_pd(context);
-	if (pd)
+	if (pd){
+		// printf(" ");
 		pd->context = context;
-
+	}
 	return pd;
 }
 

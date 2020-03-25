@@ -70,7 +70,6 @@ static struct verbs_context *dis_alloc_context(struct ibv_device *ibv_dev,
 
     ctx = verbs_init_and_alloc_context(ibv_dev, cmd_fd, ctx, ibv_ctx, 
                                         RDMA_DRIVER_UNKNOWN);
-
     if (!ctx) {
         return NULL;
     }

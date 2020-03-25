@@ -56,7 +56,7 @@ int dis_poll_cq(struct ibv_cq *ibv_cq, int nwc, struct ibv_wc *wc);
 int dis_destroy_cq(struct ibv_cq *ibv_cq);
 
 // Shared Receive Queue verbs.
-//truct ibv_srq *dis_create_srq();
+//struct ibv_srq *dis_create_srq();
 //int dis_modify_srq();
 //int dis_query_srq();
 //int dis_resize_srq();
@@ -72,7 +72,7 @@ int dis_query_qp(struct ibv_qp *ibv_qp,
                     struct ibv_qp_init_attr *init_attr);
 int dis_modify_qp(struct ibv_qp *ibv_qp, 
                     struct ibv_qp_attr *attr, 
-                    int ibv_qp_attr_mask);
+                    int attr_mask);
 int dis_destroy_qp(struct ibv_qp *ibv_qp);
 
 // Posting verbs.
