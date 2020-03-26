@@ -52,15 +52,15 @@ int dis_query_port(struct ibv_context *ibv_ctx,
 struct ibv_pd *dis_alloc_pd(struct ibv_context *ibv_ctx)
 {
     int ret;
-    size_t cmd_size, pd_size, resp_size;
-    struct ibv_pd *ibv_pd;
+    size_t cmd_size, resp_size, pd_size;
     struct ibv_alloc_pd cmd;
     struct ib_uverbs_alloc_pd_resp resp;
+    struct ibv_pd *ibv_pd;
     printf_debug(DIS_STATUS_START);
 
-    pd_size     = sizeof(struct ibv_pd);
+    cmd_size    = sizeof(struct ibv_alloc_pd);
     resp_size	= sizeof(struct ib_uverbs_alloc_pd_resp);
-    cmd_size    = sizeof(struct ibv_query_port);
+    pd_size     = sizeof(struct ibv_pd);
     memset(&cmd, 0, cmd_size);
 	memset(&resp, 0, resp_size);
 
@@ -106,17 +106,64 @@ int dis_dealloc_pd(struct ibv_pd *ibv_pd)
 
 struct ibv_mr *dis_reg_mr(struct ibv_pd *ibv_pd, 
                             void *buf, 
-                            size_t len, 
+                            size_t length, 
                             uint64_t hca_va, 
                             int ibv_access_flags)
 {
-    errno = ENOSYS;
-    return NULL;
+    int ret;
+    size_t cmd_size, resp_size, verbs_mr_size;
+    struct ibv_reg_mr cmd;
+    struct ib_uverbs_reg_mr_resp resp;
+    struct verbs_mr *verbs_mr;
+    printf_debug(DIS_STATUS_START);
+
+    cmd_size        = sizeof(struct ibv_reg_mr);
+    resp_size	    = sizeof(struct ib_uverbs_reg_mr_resp);
+    verbs_mr_size   = sizeof(struct verbs_mr);
+    memset(&cmd, 0, cmd_size);
+	memset(&resp, 0, resp_size);
+
+    verbs_mr = malloc(verbs_mr_size);
+    if (!verbs_mr) {
+        printf_debug(DIS_STATUS_FAIL);
+        return NULL;
+    }
+
+    ret = ibv_cmd_reg_mr(ibv_pd,
+                            buf,
+                            length,
+                            hca_va,
+                            ibv_access_flags,
+                            verbs_mr,
+                            &cmd,
+                            cmd_size,
+                            &resp,
+                            resp_size);
+    if (ret) {
+        printf_debug(DIS_STATUS_FAIL);
+        free(verbs_mr);
+        return NULL;
+    }
+
+    printf_debug(DIS_STATUS_COMPLETE);
+    return &verbs_mr->ibv_mr;
 }
 
-int dis_dereg_mr(struct verbs_mr *mr)
+int dis_dereg_mr(struct verbs_mr *verbs_mr)
 {
-    return ENOSYS;
+    int ret;
+    printf_debug(DIS_STATUS_START);
+
+    ret = ibv_cmd_dereg_mr(verbs_mr);
+    if (ret) {
+        printf_debug(DIS_STATUS_FAIL);
+        return ret;
+    }
+
+    free(verbs_mr);
+
+    printf_debug(DIS_STATUS_COMPLETE);
+    return 0;
 }
 
 struct ibv_cq *dis_create_cq(struct ibv_context *ibv_ctx, 

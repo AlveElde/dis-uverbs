@@ -39,10 +39,10 @@ int dis_dealloc_pd(struct ibv_pd *ibv_pd);
 // Memory Region verbs.
 struct ibv_mr *dis_reg_mr(struct ibv_pd *ibv_pd, 
                             void *buf, 
-                            size_t len, 
+                            size_t length, 
                             uint64_t hca_va, 
                             int ibv_access_flags);
-int dis_dereg_mr(struct verbs_mr *mr);
+int dis_dereg_mr(struct verbs_mr *verbs_mr);
 
 // Completion Queue verbs.
 struct ibv_cq *dis_create_cq(struct ibv_context *ibv_ctx, 
