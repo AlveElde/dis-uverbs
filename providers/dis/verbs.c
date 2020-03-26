@@ -79,8 +79,9 @@ struct ibv_pd *dis_alloc_pd(struct ibv_context *ibv_ctx)
     if (ret) {
         printf_debug(DIS_STATUS_FAIL);
 		free(ibv_pd);
-        return NULL;;
+        return NULL;
     }
+
 	ibv_pd->context = ibv_ctx;
     printf_debug(DIS_STATUS_COMPLETE);
     return ibv_pd;
@@ -161,9 +162,20 @@ struct ibv_cq *dis_create_cq(struct ibv_context *ibv_ctx,
     return ibv_cq;
 }
 
-int dis_poll_cq(struct ibv_cq *ibv_cq, int nwc, struct ibv_wc *wc)
+int dis_poll_cq(struct ibv_cq *ibv_cq, int num_wc, struct ibv_wc *ibv_wc)
 {
-    return ENOSYS;
+    int ret;
+    printf_debug(DIS_STATUS_START);
+
+    ret = ibv_cmd_poll_cq(ibv_cq, num_wc, ibv_wc);
+    if (ret) {
+        printf_debug(DIS_STATUS_FAIL);
+        return ret;
+    }
+
+    printf_debug(DIS_STATUS_COMPLETE);
+    return 0;
+
 }
 
 int dis_destroy_cq(struct ibv_cq *ibv_cq)
@@ -241,8 +253,6 @@ int dis_modify_qp(struct ibv_qp *ibv_qp,
 
 	cmd_size = sizeof(struct ibv_modify_qp);
 	memset(&cmd, 0, cmd_size);
-
-	printf_debug("Attr mask: %d\n", attr_mask);
 	
 	ret = ibv_cmd_modify_qp(ibv_qp, attr, attr_mask, &cmd, cmd_size);
 	if (ret) {
@@ -275,14 +285,34 @@ int dis_post_send(struct ibv_qp *ibv_qp,
                     struct ibv_send_wr *send_wr, 
                     struct ibv_send_wr **bad_wr)
 {
-    return ENOSYS;
+    int ret;
+	printf_debug(DIS_STATUS_START);
+
+    ret = ibv_cmd_post_send(ibv_qp, send_wr, bad_wr);
+    if (ret) {
+		printf_debug(DIS_STATUS_FAIL);
+		return ret;
+	}
+
+    printf_debug(DIS_STATUS_COMPLETE);
+	return 0;
 }
 
 int dis_post_recv(struct ibv_qp *ibv_qp, 
                     struct ibv_recv_wr *recv_wr, 
                     struct ibv_recv_wr **bad_wr)
 {
-    return ENOSYS;
+    int ret;
+	printf_debug(DIS_STATUS_START);
+
+    ret = ibv_cmd_post_recv(ibv_qp, recv_wr, bad_wr);
+    if (ret) {
+		printf_debug(DIS_STATUS_FAIL);
+		return ret;
+	}
+
+    printf_debug(DIS_STATUS_COMPLETE);
+	return 0;
 }
 
 struct ibv_ah *dis_create_ah(struct ibv_pd *ibv_pd, struct ibv_ah_attr *attr)

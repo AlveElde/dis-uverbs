@@ -284,7 +284,7 @@ LATEST_SYMVER_FUNC(ibv_alloc_pd, 1_1, "IBVERBS_1.1",
 
 	pd = get_ops(context)->alloc_pd(context);
 	if (pd){
-		// printf(" ");
+		printf(" ");
 		pd->context = context;
 	}
 	return pd;

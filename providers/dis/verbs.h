@@ -49,7 +49,7 @@ struct ibv_cq *dis_create_cq(struct ibv_context *ibv_ctx,
                                 int cqe_max, 
                                 struct ibv_comp_channel *ibv_comp_ch, 
                                 int vec);
-int dis_poll_cq(struct ibv_cq *ibv_cq, int nwc, struct ibv_wc *wc);
+int dis_poll_cq(struct ibv_cq *ibv_cq, int num_wc, struct ibv_wc *ibv_wc);
 //int dis_notify_cq();
 //int dis_cq_event();
 //int dis_resize_cq();
